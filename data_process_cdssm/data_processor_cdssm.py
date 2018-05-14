@@ -1,6 +1,47 @@
 import datetime
 import array
 
+
+class DataProcessor(object):
+    def __init__(self):
+        return
+
+    def clean_data(self):
+        file_write1 = open('_merge.querypair.v1', encoding='utf-8', mode='w')
+        file_write2 = open('_merge.originalquery.v1', encoding='utf-8', mode='w')
+        file_write3 = open('_merge.standardquery.v1', encoding='utf-8', mode='w')
+        raw_dict = {}
+        new_query_ori = ''
+        new_query_standard = ''
+        new_pair = ''
+        with open('D:\code\CMCC\data_share\source.1245.new_source.8.new_tianqi\\training_data\\_merge', encoding='utf-8', mode='r') as file_read:
+            for line in file_read:
+                parts = line.strip().split('\t')
+                if (len(parts) < 2):
+                    print(line)
+                else:
+                    raw_dict[parts[0].strip()] = parts[1].strip()
+        counter = 0
+        with open('D:\code\CMCC\data_share\share_data_yuguang\\fanyuguang\\cmcc_original_queries.txt', encoding='utf-8', mode='r') as file_read:
+            for line in file_read:
+                counter += 1
+                if(counter%100==0):
+                    print("counter : " , str(counter))
+                line = line.strip()
+                if (line != ''):
+                    if (line in raw_dict.keys()):
+                        new_query_ori = new_query_ori + raw_dict[line] +'\n'
+                        new_query_standard = new_query_standard + line +'\n'
+                        new_pair = new_pair + line + '\t' + raw_dict[line] + '\n'
+                    else:
+                        print(line)
+
+        file_write2.write(new_query_ori)
+        file_write3.write(new_query_standard)
+        file_write1.write(new_pair)
+        print('lines:', str(counter))
+
+
 def data_processor_train():
     with open('_merge', encoding='utf-8', mode='r') as file1:
         with open('after', encoding='utf-8', mode='w') as file2:
@@ -221,9 +262,11 @@ def extract_false_evaluations():
 if __name__ == '__main__':
     # data_processor_evaluation_label6()
     # data_processor_evaluation_label5()
-    delete_no_answer_query()  # for the evaluation set
+    # delete_no_answer_query()  # for the evaluation set
     # create_vocabulary_dict()
     # extract_false_evaluations()
 
     # create_evaluation_set()
     # extract_false_evaluations()
+    data_processor = DataProcessor()
+    data_processor.clean_data()

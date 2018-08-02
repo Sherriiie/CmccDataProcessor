@@ -1,4 +1,3 @@
-import jieba
 import re
 import random
 import json
@@ -104,7 +103,7 @@ class EntityExtraction4Peopledaily(object):
 class EntityExtraction4Cmcc(object):
     'format the entity brace labels to fitting the model, 9 labels in total '
     def __init__(self):
-        self.labels = ['business','attribute','act','date','price','data','call','pronoun','operator']
+        self.labels = ['business','attribute','act','date','price','data','call','pronoun','operator', 'location']
 
 
     def label_entity_cmcc(self, entity_initial):
@@ -152,6 +151,8 @@ class EntityExtraction4Cmcc(object):
                 sentance_labeled = ''
                 tail = sentance
                 for i in range(count + 1):
+                    if tail == '':
+                        break
                     matcher = re.search(pattern, tail)
                     if (matcher != None):
                         head = matcher.group(1)
@@ -176,11 +177,27 @@ class EntityLabelCmcc(object):
         # 9 types of entities
         self.patterns = dict()
         self.config_path = 'Configure/'
+        # self.entity_business = self.read_entity_from_config(self.config_path + 'gd-knowledge-20180205_TemplateToKnowledgeName.json')
+        # self.entity_business += self.read_entity_from_config(self.config_path + 'gx-knowledge-20180205_TemplateToKnowledgeName.json')
+        # self.entity_attribute = self.read_entity_from_config(self.config_path + 'attribute_merge.json')
+        # self.entity_attribute += self.read_entity_from_config(self.config_path + 'attribute.add')
+
         self.entity_business = self.read_entity_from_config(self.config_path + 'gd-knowledge-20180205_TemplateToKnowledgeName.json')
         self.entity_business += self.read_entity_from_config(self.config_path + 'gx-knowledge-20180205_TemplateToKnowledgeName.json')
+        self.entity_business += self.read_entity_from_config(self.config_path + 'entity_add1.rewrite')
+        self.entity_business += self.read_entity_from_config(self.config_path + 'entity_add2_manual.rewrite')
+        self.entity_business += self.read_entity_from_config(self.config_path + 'entity_add3_userdict.rewrite')
+        self.entity_business += self.read_entity_from_config(self.config_path + 'entity_add4_cmcc.json')
         self.entity_attribute = self.read_entity_from_config(self.config_path + 'attribute_merge.json')
+        self.entity_attribute += self.read_entity_from_config(self.config_path + 'attribute.add')
+
+        self.entity_location = self.read_entity_from_config(self.config_path + 'location_add.rewrite')
+
+
         self.entity_business = list(set(self.entity_business))
         self.entity_attribute = list(set(self.entity_attribute))
+        self.entity_location = list(set(self.entity_location))
+
         self.pattern_business = list()
         self.pattern_attribute = list()
         self.pattern_act = list()
@@ -190,9 +207,11 @@ class EntityLabelCmcc(object):
         self.pattern_call = list()
         self.pattern_pronoun = list()
         self.pattern_operator = list()
+        self.pattern_location = list()
 
         self.pattern_business = [re.compile(entity_b.replace('(','\(').replace(')','\)'))for entity_b in self.entity_business]
         self.pattern_attribute = [re.compile(entity_a.replace('(','\(').replace(')','\)'))for entity_a in self.entity_attribute]
+        self.pattern_location = [re.compile(entity_l.replace('(','\(').replace(')','\)'))for entity_l in self.entity_location]
         self.pattern_act.append(re.compile(r'开通|办理|变更|取消'))
         self.pattern_date.append(re.compile(r'\d+年\d+月\d+日|\d+月\d+日'))
         self.pattern_price.append(re.compile(r'\d+元'))
@@ -203,6 +222,7 @@ class EntityLabelCmcc(object):
 
         self.patterns['business'] = self.pattern_business
         self.patterns['attribute'] = self.pattern_attribute
+        self.patterns['location'] = self.pattern_location
         self.patterns['act'] = self.pattern_act
         self.patterns['date'] = self.pattern_date
         self.patterns['price'] = self.pattern_price
@@ -227,9 +247,11 @@ class EntityLabelCmcc(object):
         # normaliza file
         file_write = open(path_read + '.extractentity', encoding='utf-8', mode='w')
         counter_entity = 0
+        counter_labels = 0
         for pattern_key in self.patterns.keys():
             # print('====== pattern_key: ', pattern_key)
             pattern_list = self.patterns[pattern_key]
+
             with open(path_read, encoding='utf-8', mode='r') as file_read:
                 if (self.new_lines == []):
                     lines = file_read.readlines()
@@ -239,6 +261,8 @@ class EntityLabelCmcc(object):
                     self.new_lines = []
                 counter_line = 0
                 for line in lines:
+                    if counter_line >= 500:
+                        break
                     counter_line += 1
                     if(counter_line % 100 ==0):
                         print('====== counter_line: ', str(counter_line))
@@ -248,18 +272,20 @@ class EntityLabelCmcc(object):
                             if (self.get_entity_flag(line, iter.group())):
                                 print(iter.group())
                                 counter_entity += 1
+                                counter_labels += len(iter.group())
                                 line = line.replace(iter.group(), '{{' +pattern_key +':'+ iter.group() +'}}')
                     self.new_lines.append(line)
         print('\nThere are {0} entities in file {1}'.format(counter_entity, path_read))
+        print('\nThere are {0} entity labels in file {1}'.format(counter_labels, path_read))
         file_write.write(''.join(self.new_lines))
 
     #figure out if the entity is contained in another longer entity and has already been labeled
-    def get_entity_flag(line, matcher):
-        pattern = re.compile(r'{{.*?'+matcher)
+    def get_entity_flag(self, line, matcher):
+        pattern = re.compile(r'.*({{.*?)'+matcher)
         m = pattern.search(line)
         if(m==None):
             return True
-        elif ('}}' in m.group()):
+        elif ('}}' in m.group(1)):
             return True
         else:
             return False
@@ -502,6 +528,7 @@ class TrainingDataProcessor(object):
 
 
 '''
+for entity linking
 only extract entities of BUSINESS and ATTRIBUTE from standard query
 '''
 class CDSSMSentenceAndPhrase(object):
@@ -531,27 +558,9 @@ class CDSSMSentenceAndPhrase(object):
         self.pattern_pronoun = list()
         self.pattern_operator = list()
 
-
-# input data are upcased.
-#         temp_p = r'[()]'
-#         self.pattern_business = [re.compile(entity_b.replace('(','').replace(')','').replace('（','').replace('）', ''))for entity_b in self.entity_business]         # (should be escaped
-#         self.pattern_attribute = [re.compile(entity_a.replace('(','').replace(')','').replace('（','').replace('）', '')) for entity_a in self.entity_attribute]
-#         for entity_b in self.entity_business:
-#             print(entity_b)
-#             self.pattern_business.append(re.compile(re.sub('[()（）]', '', entity_b)))
-#         # for entity_a in self.entity_attribute
-#         print('finished')
         self.pattern_business = [re.compile(re.sub('[()（）]', '', entity_b)) for entity_b in self.entity_business]
         self.pattern_attribute = [re.compile(re.sub('[()（）]', '', entity_a)) for entity_a in self.entity_attribute]
-
-        # test1 = ['（第一个）测试','是(我们)的']
-        # test2 = []
-        # for ent in test1:
-        #     ent1 = re.sub('[()]', '', ent)
-        #     test2.append(ent1)
-        # self.pattern_business = [re.sub('[()]', '', entity_b) for entity_b in self.pattern_business]
-
-        self.pattern_act.append(re.compile(r'开通|办理|变更|取消'))
+        self.pattern_act.append(re.compile(r'开通|办理|变更|取消|查询'))
         self.pattern_date.append(re.compile(r'\d+年\d+月\d+日|\d+月\d+日'))
         self.pattern_price.append(re.compile(r'\d+元'))
         self.pattern_data.append(re.compile(r'\d+[M兆G]'))
@@ -597,7 +606,7 @@ class CDSSMSentenceAndPhrase(object):
                 if (counter_line % 100 == 0):
                     print('====== counter_line: ', str(counter_line))
 
-                flag = [0 for i in range(len(line))]
+                flag = [0 for i in range(len(line))]        # mark if the word is in any labels
                 # tag: o other; a attribute; b business; c price; d datetime; e dataflow; f call duration; g act
                 tag = ['o' for i in range(len(line))]
                 for pattern_key in self.patterns.keys():
@@ -677,50 +686,48 @@ def rewrite_entity_config(path_read):
             if (line == ''):
                 pass
             else:
-                tmp = line.split(' ')
+                # tmp = line.split(' ')   # should the entity separated by space? or delete space?
+                tmp = [line.replace(' ', '')]
                 entity_list += tmp
+                # entity_list.append(tmp[0])
     entity_list = list(set(entity_list))
     if('' in entity_list):
         entity_list.remove('')
     entity_dict["实体配置"] = entity_list
     file_write.write(json.dumps(obj=entity_dict, indent=2, ensure_ascii=False))
 
-
-
-
-
-
-
 if __name__ == '__main__':
     print('============== main entrance')
-    print ("we are in %s"%__name__)
+    print("we are in %s"%__name__)
     # split_into_sentances()
     # label_data()
     # attribute_merge_into_json()
     # split_data_set()
     # file_path = 'test'
     # file_path = '_merge.originalquery.part1'
-    file_path = 'cmcc_query_standard'
-    # file_path = 'test'
-    # entity_extractor = EntityLabelCmcc()
-    # entity_extractor.extract_entity(path_read=file_path)
-    # training_data_processor = TrainingDataProcessor('Training_data\\')
+    # rewrite_entity_config('Configure\\location_add')
+    # file_path = 'cmcc_query_standard'
+    file_path = 'test.txt'
+    entity_extractor = EntityLabelCmcc()
+    entity_extractor.extract_entity(path_read=file_path)
+    # training_data_processor = TrainingDataProcessor('TrainingData\\')
     # training_data_processor.get_valid_data('_merge.originalquery.part1.extractentity')
+    # training_data_processor.get_valid_data('cmcc_query_standard_nodup_ner.extractentity')
+    #
     # data_labeler = EntityExtraction4Cmcc()
-    # data_labeler.label_data_cmcc('Training_data\\_merge.originalquery.part1.extractentity.valid')
+    # data_labeler.label_data_cmcc('TrainingData\\cmcc_query_standard_nodup_ner.extractentity.valid')
+    # data_labeler.label_data_cmcc('TrainingData\\test1.extractentity.valid')
 
     # random_data('D:\code\CMCC\data_share\share_data_yuguang\\fanyuguang\cmcc_original queries.txt', 'queries', 5000)          # random data for self labeling by hand
-
-
     # random_data('queries.part2', 'queries', 100000)            # random data for cmcc labeling
 
-    # rewrite_entity_config('Configure\\entity_add3_userdict')
-    cdssm = CDSSMSentenceAndPhrase()
-    cdssm.extract_entity(path_read=file_path)
-    #
-    training_data_processor = TrainingDataProcessor('Training_data\\')
-    training_data_processor.format_with_brace('cmcc_query_standard.extractentity')
-    training_data_processor.get_valid_data('cmcc_query_standard.extractentity.brace')
-    data_labeler = EntityExtraction4Cmcc()
-    data_labeler.label_data_cmcc('Training_data\\cmcc_query_standard.extractentity.brace.valid')
 
+    # cdssm = CDSSMSentenceAndPhrase()
+    # cdssm.extract_entity(path_read=file_path)
+    #
+    # training_data_processor = TrainingDataProcessor('TrainingData\\')
+    # training_data_processor.format_with_brace('cmcc_query_standard.extractentity')
+    # training_data_processor.get_valid_data('cmcc_query_standard.extractentity')
+    # data_labeler = EntityExtraction4Cmcc()
+    # data_labeler.label_data_cmcc('TrainingData\\test1.extractentity.valid')
+    #

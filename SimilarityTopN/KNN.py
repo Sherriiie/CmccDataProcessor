@@ -2,7 +2,7 @@ import math
 # return list [intent_id, score]
 class knn:
     @staticmethod
-    def GetTopK(candidates=[('A', 0.91),('B', 0.90), ('B', 0.89), ('B', 0.88), ('B', 0.87), ('C', 0.92)], knnTopK=10, knnThreshold=0.5, certaintyScore=0.95, enableKnnLogDecay=True):
+    def GetTopK(candidates=[('A', 0.91),('B', 0.90), ('B', 0.89), ('B', 0.88), ('B', 0.87), ('C', 0.92)], knnTopK=10, knnThreshold=0.5, certaintyScore=1.0, enableKnnLogDecay=True):
         '''
         rank the input category by its score with KNN algorithm.
         :param candidates:
@@ -12,10 +12,14 @@ class knn:
         :param enableKnnLogDecay: if enable score decay with the re-occurrence order.
         :return: res intent category with score in list of tuple as input format.
         '''
+
+        if len(candidates) == 0:
+            return []
         # get TopK valid candidates
         candidates = sorted(candidates, key=lambda c:c[1], reverse=True)[:knnTopK]      # descending order
         # threshold filter
-        candidates = [cand for cand in candidates if cand[1] > knnThreshold]
+        if len(candidates)>0 and candidates[0][1]>knnThreshold:
+            candidates = [cand for cand in candidates if cand[1] > knnThreshold]
 
         # category_id with max score
         temp_id = []
@@ -29,21 +33,19 @@ class knn:
                     temp_cand[cand[0]] = cand[1]
         id_maxscore = temp_cand
 
-        if len(candidates) == 0:
-            return id_maxscore
         # whether there is any answer with enough confidence
         if candidates[0][1] > certaintyScore:
-            return id_maxscore
+            return [(k,v) for k,v in id_maxscore.items()]
 
         # id_weightedsum
         temp_id = []
         temp_cand = {}
         for (cand, i) in zip(candidates, range(len(candidates))):
+            val = cand[1] / math.log(i + 2, 2) if enableKnnLogDecay else cand[1]
             if cand[0] not in temp_id:
-                temp_cand[cand[0]] = cand[1]
+                temp_cand[cand[0]] = val
                 temp_id.append(cand[0])
             else:
-                val = cand[1]/math.log(i+2, 2) if enableKnnLogDecay else cand[1]
                 temp_cand[cand[0]] += val
         id_weightedsum = temp_cand
 
@@ -54,4 +56,5 @@ class knn:
         return res
 
 if __name__ == '__main__':
-    knn.GetTopK()
+    res = knn.GetTopK([('2', 0.7758925917179603), ('0', 0.6874765056185168), ('0', 0.6644089036758635), ('5', 0.6611151983156341), ('5', 0.6582541939097556)])
+    print(res)

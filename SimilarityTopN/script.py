@@ -1,7 +1,7 @@
 import numpy as np
 from argparse import ArgumentParser
 import json
-
+from SimilarityTopN.KNN import knn
 
 class CalSimilarity:
     def __init__(self, candidates_path, candidates_path_with_index='training_withindex.txt'):
@@ -12,6 +12,7 @@ class CalSimilarity:
         self.vector_index = {}
         self.read_candidates()
         self.candidates_path_with_index = candidates_path_with_index
+        self.prediction_scores = []
         return
 
     def cal_cosine(self, vec1, vec2):
@@ -67,6 +68,7 @@ class CalSimilarity:
     def evaluate(self, topN=5):
         file_path = 'evaluation.vector.txt'
         new_lines = []
+        prediction_scores = []
         new_lines_index = []
         index = 0
         file_write = open('prediction_scores.txt', encoding='utf-8', mode='w')
@@ -76,6 +78,7 @@ class CalSimilarity:
                 index += 1
                 print('==== Line %d' % (index))
                 id_scores = []
+                id_scores_self = []
                 id_scores_index = []
                 parts = line.strip().split('\t')
                 parts[1] = np.array(parts[1].split(' '), dtype=float)
@@ -83,11 +86,14 @@ class CalSimilarity:
                                                topN)  # schema of every candidate: index, intent_id, vector, cos
                 for cand in candidates_top:
                     id_scores.append(cand[1] + ' ' + '%.4f' % cand[3])
+                    id_scores_self.append((cand[1], cand[3]))
                     id_scores_index.append(cand[1] + ' ' + '%.4f' % cand[3] + ' ' + cand[0])
                 new_lines.append('\t'.join(id_scores))
+                prediction_scores.append((id_scores_self))
                 new_lines_index.append('\t'.join(id_scores_index))
             file_write.write('\n'.join(new_lines))
             file_write_index.write('\n'.join(new_lines_index))
+            self.prediction_scores = prediction_scores
         print("Evaluation of score calculating finished")
 
 
@@ -123,13 +129,26 @@ class CalSimilarity:
                 print(answer + '\t' + prediction)
                 value['prediction_flag'] = False
             log_dict[lines_answer[i].strip()] = value
-
-
         with open('evaluation_log.json', encoding='utf-8', mode='w') as outfile:
             json.dump(log_dict, outfile, indent=2, ensure_ascii=False)
         print('Evaluation log has been written into json file evaluation_log.json')
         precison = correct_number * 1.0 / len(lines_answer)
         print("correct_number=%d, precision=%0.4f" % (correct_number, precison))
+
+    def conclude_precision_for_self(self, path_write='ranker_results_self.txt'):
+        prediction_scores = self.prediction_scores
+        file_writer = open(path_write, encoding='utf-8', mode='w')
+        index = 0
+        new_lines = []
+        for pred_score in prediction_scores:
+            index += 1
+            res = knn.GetTopK(candidates=pred_score)
+            line = 'index ' + str(index) + '\t' + '\t'.join([r[0] + '\t' + '%.4f' % r[1] for r in res])
+            new_lines.append(line)
+        file_writer.write('\n'.join(new_lines))
+        file_writer.flush()
+        file_writer.close()
+        self.conclude_precision(prediciton_path_raw='prediction_scores_index.txt', prediciton_path_ranked='ranker_results_self.txt', answer_path='evaluation.txt')
 
     def get_raw_trigger_queries(self):
         # get top 10 closest neighbour for every training vector.
@@ -247,6 +266,6 @@ if __name__ == '__main__':
     # calculator.exe_narrow_trigger_queries('prediction_index_scores.4narrow.txt', 0.0001)
     # calculator.index2vector(path_read='prediction_index_scores.4narrow.done.txt')
     calculator = CalSimilarity(candidates_path='training.vector.narrowed.txt')
-    # calculator.evaluate(5)
+    calculator.evaluate(5)
     # # rank the scores with KNN and get results
-    calculator.conclude_precision()
+    calculator.conclude_precision_for_self()
